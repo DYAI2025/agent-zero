@@ -96,6 +96,8 @@ class Settings(TypedDict):
     stt_waiting_timeout: int
 
     tts_kokoro: bool
+    tts_engine: str  # "kokoro" or "piper"
+    tts_piper_voice: str  # Piper voice name e.g. "de_DE-thorsten-high"
 
     mcp_servers: str
     mcp_client_init_timeout: int
@@ -1042,10 +1044,39 @@ def convert_out(settings: Settings) -> SettingsOutput:
     tts_fields.append(
         {
             "id": "tts_kokoro",
-            "title": "Enable Kokoro TTS",
-            "description": "Enable higher quality server-side AI (Kokoro) instead of browser-based text-to-speech.",
+            "title": "Enable Server TTS",
+            "description": "Enable server-side AI TTS (Kokoro or Piper) instead of browser-based text-to-speech.",
             "type": "switch",
             "value": settings["tts_kokoro"],
+        }
+    )
+
+    tts_fields.append(
+        {
+            "id": "tts_engine",
+            "title": "TTS Engine",
+            "description": "Select TTS engine: Kokoro (neural, requires GPU/PyTorch) or Piper (fast, CPU-based, multilingual)",
+            "type": "select",
+            "value": settings["tts_engine"],
+            "options": [
+                {"value": "kokoro", "label": "Kokoro (Neural)"},
+                {"value": "piper", "label": "Piper (Fast/CPU)"},
+            ],
+        }
+    )
+
+    tts_fields.append(
+        {
+            "id": "tts_piper_voice",
+            "title": "Piper Voice",
+            "description": "Voice model for Piper TTS. Downloaded automatically on first use.",
+            "type": "select",
+            "value": settings["tts_piper_voice"],
+            "options": [
+                {"value": "de_DE-thorsten-high", "label": "German - Thorsten (High)"},
+                {"value": "en_US-lessac-high", "label": "English US - Lessac (High)"},
+                {"value": "en_GB-alan-medium", "label": "English UK - Alan (Medium)"},
+            ],
         }
     )
 
@@ -1523,6 +1554,8 @@ def get_default_settings() -> Settings:
         stt_silence_duration=1000,
         stt_waiting_timeout=2000,
         tts_kokoro=True,
+        tts_engine="piper",  # Default to Piper for CPU-based low-latency TTS
+        tts_piper_voice="de_DE-thorsten-high",  # German voice as default
         mcp_servers='{\n    "mcpServers": {}\n}',
         mcp_client_init_timeout=10,
         mcp_client_tool_timeout=120,

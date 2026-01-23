@@ -1,39 +1,29 @@
 # api/synthesize.py
 
 from python.helpers.api import ApiHandler, Request, Response
-
-from python.helpers import runtime, settings, kokoro_tts
+from python.helpers import runtime, settings as settings_module, kokoro_tts, piper_tts
 
 class Synthesize(ApiHandler):
     async def process(self, input: dict, request: Request) -> dict | Response:
         text = input.get("text", "")
         ctxid = input.get("ctxid", "")
-        
+
         if ctxid:
             context = self.use_context(ctxid)
 
-        # if not await kokoro_tts.is_downloaded():
-        #     context.log.log(type="info", content="Kokoro TTS model is currently being initialized, please wait...")
-
         try:
-            # # Clean and chunk text for long responses
-            # cleaned_text = self._clean_text(text)
-            # chunks = self._chunk_text(cleaned_text)
-            
-            # if len(chunks) == 1:
-            #     # Single chunk - return as before
-            #     audio = await kokoro_tts.synthesize_sentences(chunks)
-            #     return {"audio": audio, "success": True}
-            # else:
-            #     # Multiple chunks - return as sequence
-            #     audio_parts = []
-            #     for chunk in chunks:
-            #         chunk_audio = await kokoro_tts.synthesize_sentences([chunk])
-            #         audio_parts.append(chunk_audio)
-            #     return {"audio_parts": audio_parts, "success": True}
+            # Get current TTS engine from settings
+            current_settings = settings_module.get_settings()
+            tts_engine = current_settings.get("tts_engine", "piper")
 
-            # audio is chunked on the frontend for better flow
-            audio = await kokoro_tts.synthesize_sentences([text])
+            if tts_engine == "piper":
+                # Use Piper TTS (fast, CPU-based)
+                piper_voice = current_settings.get("tts_piper_voice", "de_DE-thorsten-high")
+                audio = await piper_tts.synthesize_sentences([text], voice_name=piper_voice)
+            else:
+                # Use Kokoro TTS (neural, requires GPU)
+                audio = await kokoro_tts.synthesize_sentences([text])
+
             return {"audio": audio, "success": True}
         except Exception as e:
             return {"error": str(e), "success": False}

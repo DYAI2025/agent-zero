@@ -46,3 +46,11 @@ instruments/**
 # for browser-use
 agent_history.gif
 
+venv/
+
+# Local/temp directories
+.claude-flow/
+.hive-mind/
+.swarm/
+agent-zero-data/
+path/
