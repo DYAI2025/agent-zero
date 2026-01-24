@@ -54,3 +54,4 @@ venv/
 .swarm/
 agent-zero-data/
 path/
+models/piper/*.onnx
