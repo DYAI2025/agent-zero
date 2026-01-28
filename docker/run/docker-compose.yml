@@ -2,7 +2,10 @@ services:
   agent-zero:
     container_name: agent-zero
     image: agent0ai/agent-zero:latest
+    env_file:
+      - ./env/.env
     volumes:
       - ./agent-zero:/a0
+      - ./env/.env:/a0/.env
     ports:
       - "50080:80"

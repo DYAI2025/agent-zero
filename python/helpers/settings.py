@@ -1492,7 +1492,7 @@ def get_default_settings() -> Settings:
         chat_model_api_base="",
         chat_model_kwargs={"temperature": "0"},
         chat_model_ctx_length=100000,
-        chat_model_ctx_history=0.7,
+        chat_model_ctx_history=0.5,
         chat_model_vision=True,
         chat_model_rl_requests=0,
         chat_model_rl_input=0,

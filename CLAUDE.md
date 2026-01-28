@@ -4,215 +4,216 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Agent Zero is a general-purpose AI assistant framework built on Python/Flask with a web UI. It uses a hierarchical multi-agent system where agents can delegate tasks to subordinate agents. The framework is prompt-driven—behavior is defined by markdown files in `prompts/`.
+Agent Zero is a personal, organic agentic AI framework designed to be dynamic, customizable, and extensible. It uses LLMs to accomplish tasks through code execution, web search, memory, and multi-agent cooperation. The framework is prompt-driven with no hard-coded behaviors.
 
-## Development Commands
+## Running the Application
 
 ```bash
-# Run Web UI (default port 5000)
-python run_ui.py
-python run_ui.py --port=5555  # Custom port
-
-# Installation
+# Install dependencies
 pip install -r requirements.txt
-playwright install chromium  # Required for browser agent
+pip install -r requirements.dev.txt  # For development
+playwright install chromium          # For browser automation
 
-# Testing (uses pytest-asyncio)
-pytest -v
-pytest tests/test_filename.py::test_function_name  # Single test
-pytest tests/test_filename.py::test_function_name -s  # With stdout
+# Run web UI (default port 5000)
+python run_ui.py
 
-# Docker
+# Run on custom port
+python run_ui.py --port=5555
+
+# Docker (production)
 docker pull agent0ai/agent-zero
 docker run -p 50001:80 agent0ai/agent-zero
 
-# Local Docker build
+# Build Docker locally
 docker build -f DockerfileLocal -t agent-zero-local --build-arg CACHE_DATE=$(date +%Y-%m-%d:%H:%M:%S) .
-
-# Development with RFC (for hybrid local+Docker setup)
-docker run -p 8880:80 -p 8822:22 agent0ai/agent-zero
 ```
 
-### Environment Configuration (`.env`)
+## Testing
+
 ```bash
-API_KEY_OPENAI=sk-...
-API_KEY_ANTHROPIC=sk-ant-...
-API_KEY_GROQ=...
-API_KEY_OLLAMA=http://127.0.0.1:11434
-WEB_UI_PORT=5000
+# Run all tests
+pytest tests/
+
+# Run single test file
+pytest tests/chunk_parser_test.py
+
+# Run specific test function
+pytest tests/chunk_parser_test.py::test_example
+
+# Run with verbose output
+pytest -v tests/
 ```
 
-### VS Code Debugging
-The project includes `.vscode/launch.json` with debug profiles. Use F5 with "Debug run_ui.py" to run with breakpoints. For full functionality (code execution, search), connect to a Docker container via RFC (Settings → Development).
-
-## Architecture Overview
-
-### Entry Points
-- `run_ui.py` - Flask web server (main entry point)
-- `run_cli.py` - CLI interface
-- `run_tunnel.py` - Remote tunnel for mobile access
+## Architecture
 
 ### Core Components
 
-**`agent.py`**: Core agent implementation. `AgentContext` manages execution context (chats), `Agent` handles the message loop (LLM → Tools → Memory → Response). Agents form hierarchies where Agent 0 delegates to subordinates.
+- **`agent.py`**: Core agent implementation (~900 lines). Contains `Agent` class with `monologue()` method as the main message loop
+- **`models.py`**: LLM providers via LiteLLM
+- **`run_ui.py`**: Flask web server with 60+ API endpoints
+- **`initialize.py`**: Framework startup sequence
 
-**`models.py`**: LLM interface using LiteLLM for multi-provider support. Available providers configured in `providers.yaml`.
+### Agent Message Loop (`agent.py:monologue()`)
 
-**`initialize.py`**: Startup configuration, model initialization, MCP server setup.
+```
+monologue() → prepare_prompt() → call_chat_model() → process_tools() → [repeat until response_tool called]
+```
+
+Extension hooks fire at: `message_loop_start`, `before_main_llm_call`, `message_loop_end`, etc.
 
 ### Key Directories
 
 | Directory | Purpose |
 |-----------|---------|
-| `python/api/` | Flask API endpoint handlers (classes inheriting `ApiHandler`) |
-| `python/tools/` | Tool implementations (18 tools) |
-| `python/extensions/` | Lifecycle hooks organized by extension point |
-| `python/helpers/` | Utility modules (settings, memory, MCP, RFC, etc.) |
-| `prompts/` | Markdown files defining agent behavior |
-| `webui/` | Frontend (HTML, CSS, JS) |
-| `agents/` | Agent profiles (agent0, default, developer, hacker, researcher) |
-| `knowledge/` | RAG knowledge base (add files to `knowledge/custom/main/`) |
-| `memory/` | Persistent agent memory |
+| `python/tools/` | Built-in tools (response, code_execution, memory_*, knowledge, browser_agent, etc.) |
+| `python/extensions/` | 18+ lifecycle hooks for modular functionality |
+| `python/api/` | Flask API handlers (subclass ApiHandler) |
+| `python/helpers/` | 40+ utility modules |
+| `prompts/` | System prompts and tool prompts (Markdown) |
+| `prompts/default/` | Default prompt profile |
+| `agents/` | Subordinate agent profiles (developer, hacker, researcher) |
+| `knowledge/` | RAG knowledge base (custom/main for user, default for system) |
 | `instruments/` | Custom scripts callable by agents |
-| `usr/projects/` | Project-specific isolated workspaces |
+| `memory/` | Persistent agent memory storage |
+| `webui/` | Frontend (HTML/JS/CSS) |
 
 ### Extension System
 
-Extensions hook into agent lifecycle. Files execute in alphabetical order (use numeric prefixes like `_10_`, `_20_`).
+Extensions live in `python/extensions/{hook_name}/` and execute alphabetically:
+```
+python/extensions/message_loop_prompts_before/_20_behaviour_prompt.py
+python/extensions/response_stream_chunk/_50_json_output.py
+```
 
-**Extension points** in `python/extensions/`:
-- `agent_init/` - Agent initialization
-- `before_main_llm_call/` - Pre-LLM call modifications
-- `message_loop_start/`, `message_loop_end/` - Message loop lifecycle
-- `message_loop_prompts_before/`, `message_loop_prompts_after/` - Prompt processing
-- `monologue_start/`, `monologue_end/` - Agent monologue lifecycle
-- `response_stream/`, `response_stream_chunk/`, `response_stream_end/` - Response streaming
-- `reasoning_stream/`, `reasoning_stream_chunk/`, `reasoning_stream_end/` - Reasoning output
-- `tool_execute_before/`, `tool_execute_after/` - Tool execution hooks
-- `system_prompt/` - System prompt processing
-- `hist_add_before/`, `hist_add_tool_result/` - History management
-- `error_format/` - Error formatting
-- `user_message_ui/` - UI message handling
-- `util_model_call_before/` - Utility model preprocessing
+To disable: rename file with leading underscore (e.g., `browser._py`)
 
-**Override mechanism**: Agent-specific extensions in `agents/{profile}/extensions/{point}/` override defaults by filename match.
+**Extension Points:**
+- `agent_init` - Agent initialization
+- `before_main_llm_call` - Before LLM API call
+- `message_loop_start/end` - Message loop boundaries
+- `message_loop_prompts_before/after` - Prompt processing
+- `monologue_start/end` - Agent monologue boundaries
+- `reasoning_stream` / `response_stream` - Stream data handlers
+- `response_stream_chunk` - JSON output processing per chunk
+- `system_prompt` - System prompt processing
 
-### Tool System
-
-Tools in `python/tools/` inherit from `Tool` base class. Tool lifecycle: `before_execution` → `execute` → `after_execution`.
-
-Key tools:
-- `code_execution_tool.py` - Python/Node.js/Shell execution (via RFC to Docker)
-- `browser_agent.py` - Web browsing with vision LLM (requires `playwright install chromium`)
-- `call_subordinate.py` - Delegate to subordinate agents with optional role profiles
-- `memory_*.py` - Long-term memory operations (save, load, delete, forget)
-- `document_query.py` - RAG-based document Q&A
-- `search_engine.py` - SearXNG web search
-- `response.py` - Output to user (breaks message loop)
-- `behaviour_adjustment.py` - Dynamic behavior modification
-- `scheduler.py` - Cron-based task scheduling
-- `a2a_chat.py` - Agent-to-Agent protocol communication
-- `notify_user.py` - Push notifications to user
-
-**Override mechanism**: `agents/{profile}/tools/` overrides `python/tools/` by filename.
+**Extension Override:** Agent-specific extensions in `agents/{profile}/extensions/{hook}/` override defaults with same filename
 
 ### Prompt System
 
-Core prompts in root `prompts/` directory:
-- `agent.system.main.md` - Central hub referencing other prompts via `{{ include }}`
-- `agent.system.tool.*.md` - Individual tool definitions
-- `agent.system.main.role.md` - Agent's role and capabilities
+Prompts are Markdown files with templating:
+- `{{ include "path/to/file.md" }}` - Include another prompt file
+- `{{variable_name}}` - Inject variable value
 
-**Features**:
-- Variable placeholders: `{{var}}`
-- File includes: `{{ include "file.md" }}`
-- Dynamic Python loaders: Create `filename.py` alongside `filename.md` to generate variables
+Naming: `{fw|agent}.{system|message|tool}.{purpose}.md`
 
-**Custom prompts**: Create subfolder in `prompts/`, copy/modify files. Select in Settings → Agent Config.
+Core prompt: `prompts/default/agent.system.main.md`
+
+**Dynamic Variable Loaders:** Create `{prompt_name}.py` alongside `{prompt_name}.md` with a `VariablesPlugin` subclass to generate variables at runtime:
+```python
+from python.helpers.files import VariablesPlugin
+class MyLoader(VariablesPlugin):
+    def get_variables(self, file: str, backup_dirs: list[str] | None = None) -> dict[str, Any]:
+        return {"my_var": "computed_value"}
+```
 
 ### API Handler Pattern
 
 ```python
-class MyHandler(ApiHandler):
+class ApiHandler:
+    async def process(self, input: dict, request: Request) -> dict | Response:
+        pass
+
     @staticmethod
-    def requires_auth() -> bool: ...  # Web UI auth
+    def requires_auth() -> bool: ...
     @staticmethod
-    def requires_api_key() -> bool: ...  # External API key auth
-
-    async def handle_request(self, request) -> Response: ...
+    def requires_api_key() -> bool: ...
 ```
 
-Key endpoints: `message.py` (chat), `api_message.py` (external API), `chat_*.py`, `settings_*.py`, `memory_*.py`, `knowledge_*.py`, `project_*.py`, `mcp_*.py`.
+### Tool Pattern
 
-### Important Helper Modules
+```python
+from python.helpers.tool import Tool, Response
 
-- `settings.py` - All configuration management
-- `memory.py` - Memory operations with FAISS vector DB
-- `history.py` - Message history and summarization (dynamic compression)
-- `mcp_handler.py`, `mcp_server.py` - MCP client/server
-- `rfc.py`, `shell_ssh.py` - Remote Function Call to Docker
-- `extension.py` - Extension loading and `call_extensions()` function
-- `files.py` - File operations and `VariablesPlugin` base class for dynamic prompts
-- `extract_tools.py` - Parse tool calls from LLM responses
-- `tokens.py` - Token counting and context window management
-
-## Development Workflow (Hybrid Mode)
-
-For local development with full functionality:
-1. Run Python framework locally in VS Code (F5 with "Debug run_ui.py")
-2. Run Docker container separately with SSH port mapped
-3. Configure RFC connection in Settings → Development (matching passwords)
-4. Local instance delegates code execution to Docker via SSH
-
-## Key Patterns
-
-- **Hybrid execution**: Framework runs locally for debugging, Docker handles code execution
-- **Agent hierarchy**: Agent 0 → subordinates → further subordinates
-- **Context window management**: Dynamic compression/summarization of older messages
-- **Projects**: Isolated workspaces with own prompts, memory, knowledge, secrets:
-  ```
-  usr/projects/{name}/.a0proj/
-  ├── project.json      # metadata and settings
-  ├── instructions/     # additional prompts (auto-injected)
-  ├── knowledge/        # files imported into memory
-  ├── memory/           # project-specific memory
-  ├── secrets.env       # sensitive variables
-  └── variables.env     # non-sensitive variables
-  ```
-
-### MCP (Model Context Protocol)
-
-Agent Zero supports both MCP server and client modes:
-- **Server**: Expose capabilities to MCP clients (Claude Desktop, etc.)
-- **Client**: Connect to external MCP servers for additional tools
-- **A2A Protocol**: Agent-to-Agent communication between instances
-
-## Prompt Engineering Patterns
-
-- Use modular .md files with `{{ include }}` directives
-- Structure content: "what it does" → "limitations" → "practical rules"
-- Behavior is defined in prompts, not hardcoded
-- Dynamic variable loaders: create `filename.py` alongside `filename.md` to generate variables at runtime (class must inherit `VariablesPlugin` from `python.helpers.files`)
-
-## Instruments
-
-Instruments are custom scripts stored in long-term memory (not in system prompt), recalled on demand:
-```
-instruments/custom/{name}/
-├── {name}.md    # Description/interface for the agent
-└── {name}.sh    # Implementation script (runs in Docker)
-```
-No spaces in folder names. Agent auto-detects and uses instruments.
-
-## Agent Profiles
-
-Profiles in `agents/` can override extensions, tools, and prompts:
-```
-agents/{profile}/
-├── extensions/{point}/   # Override specific extensions
-├── tools/                # Override specific tools
-├── prompts/              # Override specific prompts
-└── settings.json         # Override settings (sparse, only fields to change)
+class MyTool(Tool):
+    async def execute(self, **kwargs) -> Response:
+        # Access: self.agent, self.name, self.args, self.message
+        return Response(message="result", break_loop=False)
 ```
 
-Built-in profiles: `agent0`, `default`, `developer`, `hacker`, `researcher`
+**Tool Lifecycle:** `before_execution()` → `execute()` → `after_execution()`
+
+Tools need a prompt file at `prompts/default/agent.system.tool.{name}.md`
+
+**Tool Override:** Agent-specific tools in `agents/{profile}/tools/` override defaults with same filename
+
+## Configuration
+
+### Environment Variables (`.env`)
+
+```bash
+OPENAI_API_KEY=...              # LLM provider keys
+ANTHROPIC_API_KEY=...
+WEB_UI_PORT=5000
+AUTH_LOGIN=user                 # Optional web auth
+AUTH_PASSWORD=pass
+DEVELOPMENT=true                # Dev mode
+RFC_PASSWORD=...                # Remote function call
+```
+
+### Model Providers
+
+Configured in `conf/model_providers.yaml`. Supports 20+ providers: OpenAI, Anthropic, Google, Ollama, LM Studio, OpenRouter, etc.
+
+## Adding New Features
+
+**New Tool:**
+1. Create `python/tools/my_tool.py` implementing Tool class
+2. Add prompt `prompts/default/agent.system.tool.my_tool.md`
+
+**New Extension:**
+1. Create `python/extensions/{hook_name}/_##_my_extension.py`
+2. Number prefix controls execution order
+
+**New API Endpoint:**
+1. Create `python/api/my_endpoint.py` as ApiHandler subclass
+2. Automatically registered on startup
+
+**New Agent Profile:**
+1. Create `agents/my-profile/` directory
+2. Add `config.yaml` and custom prompts
+
+## Multi-Agent Hierarchy
+
+Agents form a tree: Agent 0 (root) → subordinates. Each agent reports to its superior. The first agent's superior is the human user.
+
+## Memory System
+
+- **Categories**: User info, Fragments (auto-generated), Solutions, Metadata
+- **Recall**: AI-filtered (not keyword search)
+- **Tools**: `memory_save`, `memory_load`, `memory_delete`, `memory_forget`
+
+## Projects
+
+Projects provide isolated workspaces with their own prompts, memory, knowledge, files, and secrets. Located under `/a0/usr/projects/{project_name}/` with metadata in `.a0proj/`:
+- `instructions/` - Auto-injected prompt files
+- `memory/` - Project-scoped memory storage
+- `knowledge/` - Files imported into memory
+- `secrets.env` / `variables.env` - Project-specific configuration
+
+## Debugging (VS Code)
+
+Use `.vscode/launch.json` configurations:
+- "Debug run_ui.py" - Main server (auto-enables `--development=true`)
+- "Debug current file" - Any Python file
+
+Development mode (`--development=true`) enables additional debugging output and features.
+
+Development workflow: Local IDE for debugging + Docker for code execution isolation.
+
+## Development Setup (Hybrid Mode)
+
+For development, run the framework locally while connecting to Docker for code execution:
+1. Run Docker container with SSH port mapped: `docker run -p 8880:80 -p 8822:22 agent0ai/agent-zero`
+2. Configure RFC password in both instances via Settings > Development
+3. Set SSH/HTTP ports in local instance to match Docker mapping

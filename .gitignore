@@ -55,3 +55,4 @@ venv/
 agent-zero-data/
 path/
 models/piper/*.onnx
+docker/run/env/.env.

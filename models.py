@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import os
+import re
 from typing import (
     Any,
     Awaitable,
@@ -84,6 +85,12 @@ class ModelConfig:
         if self.api_base and "api_base" not in kwargs:
             kwargs["api_base"] = self.api_base
         return kwargs
+
+
+def normalize_model_name(model_name: str) -> str:
+    """Normalize model identifiers to avoid invalid provider errors."""
+    cleaned = re.sub(r"\s*/\s*", "/", model_name.strip())
+    return re.sub(r"\s+", "-", cleaned)
 
 
 class ChatChunk(TypedDict):
@@ -749,6 +756,10 @@ def _get_litellm_chat(
     model_config: Optional[ModelConfig] = None,
     **kwargs: Any,
 ):
+    model_name = normalize_model_name(model_name)
+    if model_config:
+        model_config.name = model_name
+
     # use api key from kwargs or env
     api_key = kwargs.pop("api_key", None) or get_api_key(provider_name)
 
@@ -770,6 +781,10 @@ def _get_litellm_embedding(
     model_config: Optional[ModelConfig] = None,
     **kwargs: Any,
 ):
+    model_name = normalize_model_name(model_name)
+    if model_config:
+        model_config.name = model_name
+
     # Check if this is a local sentence-transformers model
     if provider_name == "huggingface" and model_name.startswith(
         "sentence-transformers/"
