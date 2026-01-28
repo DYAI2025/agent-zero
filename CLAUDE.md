@@ -17,10 +17,10 @@ python run_ui.py --port=5555  # Custom port
 pip install -r requirements.txt
 playwright install chromium  # Required for browser agent
 
-# Testing
+# Testing (uses pytest-asyncio)
 pytest -v
-pytest --asyncio-mode=auto  # With async support
 pytest tests/test_filename.py::test_function_name  # Single test
+pytest tests/test_filename.py::test_function_name -s  # With stdout
 
 # Docker
 docker pull agent0ai/agent-zero
@@ -42,6 +42,9 @@ API_KEY_OLLAMA=http://127.0.0.1:11434
 WEB_UI_PORT=5000
 ```
 
+### VS Code Debugging
+The project includes `.vscode/launch.json` with debug profiles. Use F5 with "Debug run_ui.py" to run with breakpoints. For full functionality (code execution, search), connect to a Docker container via RFC (Settings → Development).
+
 ## Architecture Overview
 
 ### Entry Points
@@ -53,7 +56,7 @@ WEB_UI_PORT=5000
 
 **`agent.py`**: Core agent implementation. `AgentContext` manages execution context (chats), `Agent` handles the message loop (LLM → Tools → Memory → Response). Agents form hierarchies where Agent 0 delegates to subordinates.
 
-**`models.py`**: LLM interface using LiteLLM for multi-provider support.
+**`models.py`**: LLM interface using LiteLLM for multi-provider support. Available providers configured in `providers.yaml`.
 
 **`initialize.py`**: Startup configuration, model initialization, MCP server setup.
 
@@ -166,7 +169,16 @@ For local development with full functionality:
 - **Hybrid execution**: Framework runs locally for debugging, Docker handles code execution
 - **Agent hierarchy**: Agent 0 → subordinates → further subordinates
 - **Context window management**: Dynamic compression/summarization of older messages
-- **Projects**: Isolated workspaces with own prompts, memory, knowledge, secrets (in `usr/projects/{name}/.a0proj/`)
+- **Projects**: Isolated workspaces with own prompts, memory, knowledge, secrets:
+  ```
+  usr/projects/{name}/.a0proj/
+  ├── project.json      # metadata and settings
+  ├── instructions/     # additional prompts (auto-injected)
+  ├── knowledge/        # files imported into memory
+  ├── memory/           # project-specific memory
+  ├── secrets.env       # sensitive variables
+  └── variables.env     # non-sensitive variables
+  ```
 
 ### MCP (Model Context Protocol)
 
@@ -181,6 +193,16 @@ Agent Zero supports both MCP server and client modes:
 - Structure content: "what it does" → "limitations" → "practical rules"
 - Behavior is defined in prompts, not hardcoded
 - Dynamic variable loaders: create `filename.py` alongside `filename.md` to generate variables at runtime (class must inherit `VariablesPlugin` from `python.helpers.files`)
+
+## Instruments
+
+Instruments are custom scripts stored in long-term memory (not in system prompt), recalled on demand:
+```
+instruments/custom/{name}/
+├── {name}.md    # Description/interface for the agent
+└── {name}.sh    # Implementation script (runs in Docker)
+```
+No spaces in folder names. Agent auto-detects and uses instruments.
 
 ## Agent Profiles
 
