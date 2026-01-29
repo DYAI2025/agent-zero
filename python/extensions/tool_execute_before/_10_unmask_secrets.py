@@ -10,6 +10,12 @@ class UnmaskToolSecrets(Extension):
         if not tool_args:
             return
 
+        tool_name = kwargs.get("tool_name")
+        # Skip placeholder expansion for response tool output so we can mention
+        # aliases in user-facing text without triggering secret resolution.
+        if tool_name == "response":
+            return
+
         secrets_mgr = get_secrets_manager(self.agent.context)
 
         # Unmask placeholders in args for actual tool execution
