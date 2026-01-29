@@ -25,6 +25,11 @@ logs/*
 # Handle tmp and usr directory
 tmp/*
 usr/*
+# Allow projects to be tracked (for portability)
+!usr/projects/
+!usr/projects/**
+# But never commit secrets
+usr/projects/**/secrets.env
 
 # Handle knowledge directory
 knowledge/**
