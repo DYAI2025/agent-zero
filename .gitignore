@@ -15,9 +15,12 @@
 # Ignore all contents of the virtual environment directory
 .venv/
 
-# Handle memory directory
+# Handle memory directory - allow tracking for portability
 memory/**
 !memory/**/
+!memory/**/*.db
+!memory/**/*.json
+!memory/**/*.md
 
 # Handle logs directory
 logs/*
